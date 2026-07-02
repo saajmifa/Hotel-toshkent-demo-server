@@ -1,4 +1,4 @@
-import type { Config } from "@netlify/functions";
+ import type { Config } from "@netlify/functions";
 import { getStore } from "@netlify/blobs";
 
 // Keep this list identical to src/types.ts ROOM_TYPES prefixes
@@ -40,7 +40,6 @@ function getDefaultData(): any {
 async function getDb(store: ReturnType<typeof getStore>): Promise<any> {
   const existing = await store.get(DB_KEY, { type: "json" });
   if (existing) {
-    // Backfill any missing fields (e.g. after a schema change)
     const data = existing as any;
     if (!data.roomStatus) data.roomStatus = buildDefaultRoomStatus();
     if (!data.bookings) data.bookings = [];
@@ -67,12 +66,11 @@ function json(data: any, status = 200) {
 }
 
 export default async (req: Request) => {
-  const store = getStore(DB_KEY);
+  const store = getStore({ name: DB_KEY, consistency: "strong" });
   const { pathname } = new URL(req.url);
   const method = req.method;
 
   try {
-    // 1. GET /api/hotel-data
     if (pathname === "/api/hotel-data" && method === "GET") {
       const db = await getDb(store);
       return json({
@@ -85,7 +83,6 @@ export default async (req: Request) => {
       });
     }
 
-    // 2. POST /api/hotel-data
     if (pathname === "/api/hotel-data" && method === "POST") {
       const db = await getDb(store);
       const updated = await req.json();
@@ -99,13 +96,11 @@ export default async (req: Request) => {
       return json({ status: "success" });
     }
 
-    // 3. GET /api/admin-pass
     if (pathname === "/api/admin-pass" && method === "GET") {
       const db = await getDb(store);
       return json({ password: db.adminPass || "hotel2025" });
     }
 
-    // 4. POST /api/admin-pass
     if (pathname === "/api/admin-pass" && method === "POST") {
       const db = await getDb(store);
       const body = await req.json();
@@ -117,9 +112,6 @@ export default async (req: Request) => {
       return json({ error: "Password is required" }, 400);
     }
 
-    // 5 & 6. jsonbin-status: data already syncs via Netlify Blobs (this function's
-    // own storage), so these are kept as harmless no-ops purely so the existing
-    // Admin Panel "Cloud Sync" card doesn't error out. Real sync does not depend on them.
     if (pathname === "/api/jsonbin-status" && method === "GET") {
       return json({ apiKey: "", binId: "", active: false, error: null });
     }
